@@ -11,6 +11,23 @@ log("origin: "+location.origin);
 log("secure context: "+window.isSecureContext);
 log("serviceWorker api: "+("serviceWorker"in navigator));
 log("caches api: "+("caches"in globalThis));
+
+// remove foreign service workers that hijack this page's fetches (e.g. Tynker's bramble sw)
+let killed=0;
+if("serviceWorker" in navigator){
+  try{
+    const mine=new URL("sw.js",location.href).href;
+    for(const r of await navigator.serviceWorker.getRegistrations()){
+      const sw=(r.active||r.waiting||r.installing||{}).scriptURL||"";
+      if(sw===mine)continue;
+      log("foreign sw: "+r.scope+" ("+sw+") -> unregistering");
+      await r.unregister();
+      killed++;
+    }
+    if(!killed)log("foreign sw: none");
+  }catch(e){log("sw cleanup failed: "+e.message)}
+}
+
 let swOk=false;
 try{
   const r=await fetch("sw.js",{cache:"no-store"});
@@ -18,14 +35,21 @@ try{
   swOk=r.ok&&/javascript|ecmascript/.test(ct);
   log("sw.js here: "+r.status+" ("+ct+")"+(swOk?" -> usable":" -> NOT usable"));
 }catch(e){log("sw.js here: fetch failed ("+e.message+")");}
+
 log("wisp relay: "+await new Promise(res=>{
   try{const w=new WebSocket("wss://w2.qwq.sh/ws/",["wisp-v2"]);
     const t=setTimeout(()=>{try{w.close()}catch(e){}res("TIMEOUT")},4000);
     w.onopen=()=>{clearTimeout(t);w.close();res("OPEN")};
     w.onerror=()=>{clearTimeout(t);res("BLOCKED")};
   }catch(e){res("THREW "+e.message)}}));
+
 if(!("serviceWorker"in navigator)||!("caches"in globalThis)){log("\nThis browser/page can't run Aether (needs service workers).");return;}
 if(swOk){
+  if(killed){
+    log("\nForeign worker removed - reloading once so it releases this page...");
+    setTimeout(()=>location.reload(),1500);
+    return;
+  }
   log("\nsw.js found on this origin - booting in place...");
   const h=await(await fetch(SINGLE)).text();
   document.open();document.write(h);document.close();
