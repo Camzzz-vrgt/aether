@@ -8,6 +8,7 @@ const SINGLE="https://cdn.jsdelivr.net/gh/Camzzz-vrgt/aether@8f2b4bad046d8854a8f
 const HOSTED="https://camzzz-vrgt.github.io/aether/app/";
 log("checking environment...\n");
 log("origin: "+location.origin);
+log("url: "+location.href);
 log("secure context: "+window.isSecureContext);
 log("serviceWorker api: "+("serviceWorker"in navigator));
 log("caches api: "+("caches"in globalThis));
@@ -52,15 +53,19 @@ const mine=new URL("sw.js",location.href).pathname;
 const ctrl=navigator.serviceWorker.controller;
 const ours=ctrl&&new URL(ctrl.scriptURL).pathname===mine;
 if(killed||!ours){
+  let n=0;try{n=+sessionStorage.getItem("aeboot")||0}catch(_){}
+  if(n>=4){log("\ngave up after "+n+" reloads - still not controlled. controller: "+(ctrl&&ctrl.scriptURL));return;}
+  try{sessionStorage.setItem("aeboot",n+1)}catch(_){}
   try{
-    log("registering sw.js...");
+    log("registering sw.js (attempt "+(n+1)+")...");
     await navigator.serviceWorker.register("sw.js");
     await navigator.serviceWorker.ready;
     log("worker active - reloading so it controls this page...");
-  }catch(e){log("register failed: "+e.message)}
-  setTimeout(()=>location.reload(),1200);
+    setTimeout(()=>location.reload(),1200);
+  }catch(e){log("register FAILED: "+e.message);log("not reloading - sw.js must be served with a javascript content-type");}
   return;
 }
+log("");
 
 log("\nworker controls this page - booting Aether...");
 const h=await(await fetch(SINGLE,{cache:"no-store"})).text();
