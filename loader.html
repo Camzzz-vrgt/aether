@@ -4,22 +4,23 @@
 let o=document.getElementById("o");
 if(!o){o=document.createElement("pre");o.style.cssText="font:14px monospace;padding:2em;white-space:pre-wrap;position:fixed;inset:0;background:#fff;color:#111;z-index:2147483647";document.documentElement.appendChild(o)}
 const log=t=>o.textContent+=t+"\n";
-const SINGLE="https://cdn.jsdelivr.net/gh/Camzzz-vrgt/aether@master/app/index.html";
+const SINGLE="https://cdn.jsdelivr.net/gh/Camzzz-vrgt/aether@8f2b4bad046d8854a8f87cb39e692dcd62049b63/app/index.html";
 const HOSTED="https://camzzz-vrgt.github.io/aether/app/";
 log("checking environment...\n");
 log("origin: "+location.origin);
 log("secure context: "+window.isSecureContext);
 log("serviceWorker api: "+("serviceWorker"in navigator));
 log("caches api: "+("caches"in globalThis));
+log("controller: "+(navigator.serviceWorker?.controller?.scriptURL||"none"));
 
 // remove foreign service workers that hijack this page's fetches (e.g. Tynker's bramble sw)
 let killed=0;
 if("serviceWorker" in navigator){
   try{
-    const mine=new URL("sw.js",location.href).href;
+    const mine=new URL("sw.js",location.href).pathname;
     for(const r of await navigator.serviceWorker.getRegistrations()){
       const sw=(r.active||r.waiting||r.installing||{}).scriptURL||"";
-      if(sw===mine)continue;
+      if(sw&&new URL(sw).pathname===mine)continue;
       log("foreign sw: "+r.scope+" ("+sw+") -> unregistering");
       await r.unregister();
       killed++;
@@ -36,28 +37,33 @@ try{
   log("sw.js here: "+r.status+" ("+ct+")"+(swOk?" -> usable":" -> NOT usable"));
 }catch(e){log("sw.js here: fetch failed ("+e.message+")");}
 
-log("wisp relay: "+await new Promise(res=>{
-  try{const w=new WebSocket("wss://w2.qwq.sh/ws/",["wisp-v2"]);
-    const t=setTimeout(()=>{try{w.close()}catch(e){}res("TIMEOUT")},4000);
-    w.onopen=()=>{clearTimeout(t);w.close();res("OPEN")};
-    w.onerror=()=>{clearTimeout(t);res("BLOCKED")};
-  }catch(e){res("THREW "+e.message)}}));
-
 if(!("serviceWorker"in navigator)||!("caches"in globalThis)){log("\nThis browser/page can't run Aether (needs service workers).");return;}
-if(swOk){
-  if(killed){
-    log("\nForeign worker removed - reloading once so it releases this page...");
-    setTimeout(()=>location.reload(),1500);
-    return;
-  }
-  log("\nsw.js found on this origin - booting in place...");
-  const h=await(await fetch(SINGLE)).text();
-  document.open();document.write(h);document.close();
-}else{
+if(!swOk){
   log("\nNo same-origin sw.js on "+location.origin+" - service workers cannot load cross-origin.");
   log("Redirecting to hosted Aether in 4s... ("+HOSTED+")");
-  log("\nTo run it HERE instead: put a file named sw.js next to this page.");
+  log("\nTo run it HERE instead: put the sw.js file next to this page.");
   setTimeout(()=>location.replace(HOSTED),4000);
+  return;
 }
+
+// our worker must control this page before the app boots - it redirects the
+// app's p/ and assets/ requests to the CDN
+const mine=new URL("sw.js",location.href).pathname;
+const ctrl=navigator.serviceWorker.controller;
+const ours=ctrl&&new URL(ctrl.scriptURL).pathname===mine;
+if(killed||!ours){
+  try{
+    log("registering sw.js...");
+    await navigator.serviceWorker.register("sw.js");
+    await navigator.serviceWorker.ready;
+    log("worker active - reloading so it controls this page...");
+  }catch(e){log("register failed: "+e.message)}
+  setTimeout(()=>location.reload(),1200);
+  return;
+}
+
+log("\nworker controls this page - booting Aether...");
+const h=await(await fetch(SINGLE,{cache:"no-store"})).text();
+document.open();document.write(h);document.close();
 })().catch(e=>{o.textContent+="loader error: "+e});
 </script>
