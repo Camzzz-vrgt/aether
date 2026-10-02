@@ -1,0 +1,39 @@
+<!doctype html><meta charset="utf-8"><title>Aether</title>
+<script>
+(async()=>{
+let o=document.getElementById("o");
+if(!o){o=document.createElement("pre");o.style.cssText="font:14px monospace;padding:2em;white-space:pre-wrap;position:fixed;inset:0;background:#fff;color:#111;z-index:2147483647";document.documentElement.appendChild(o)}
+const log=t=>o.textContent+=t+"\n";
+const SINGLE="https://cdn.jsdelivr.net/gh/Camzzz-vrgt/aether@master/aether-singlefile.html";
+const HOSTED="https://camzzz-vrgt.github.io/aether/";
+log("checking environment...\n");
+log("origin: "+location.origin);
+log("secure context: "+window.isSecureContext);
+log("serviceWorker api: "+("serviceWorker"in navigator));
+log("caches api: "+("caches"in globalThis));
+let swOk=false;
+try{
+  const r=await fetch("sw.js",{cache:"no-store"});
+  const ct=(r.headers.get("content-type")||"");
+  swOk=r.ok&&/javascript|ecmascript/.test(ct);
+  log("sw.js here: "+r.status+" ("+ct+")"+(swOk?" -> usable":" -> NOT usable"));
+}catch(e){log("sw.js here: fetch failed ("+e.message+")");}
+log("wisp relay: "+await new Promise(res=>{
+  try{const w=new WebSocket("wss://w2.qwq.sh/ws/",["wisp-v2"]);
+    const t=setTimeout(()=>{try{w.close()}catch(e){}res("TIMEOUT")},4000);
+    w.onopen=()=>{clearTimeout(t);w.close();res("OPEN")};
+    w.onerror=()=>{clearTimeout(t);res("BLOCKED")};
+  }catch(e){res("THREW "+e.message)}}));
+if(!("serviceWorker"in navigator)||!("caches"in globalThis)){log("\nThis browser/page can't run Aether (needs service workers).");return;}
+if(swOk){
+  log("\nsw.js found on this origin - booting in place...");
+  const h=await(await fetch(SINGLE)).text();
+  document.open();document.write(h);document.close();
+}else{
+  log("\nNo same-origin sw.js on "+location.origin+" - service workers cannot load cross-origin.");
+  log("Redirecting to hosted Aether in 4s... ("+HOSTED+")");
+  log("\nTo run it HERE instead: put a file named sw.js next to this page.");
+  setTimeout(()=>location.replace(HOSTED),4000);
+}
+})().catch(e=>{o.textContent+="loader error: "+e});
+</script>
